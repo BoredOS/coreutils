@@ -47,6 +47,7 @@ int main(int argc, char **argv) {
     printf("tail           - print lines from the bottom up\n");
     printf("tar <args>     - Create a tar archive\n");
     printf("kilo <file>    - Simple text editor\n");
+    printf("loadkeys <id>  - Set keyboard layout (e.g. fr, en, azerty, qwerty)\n");
     printf("\nHint: Use Ctrl+C to force quit any running application.\n");
     return 0;
 }

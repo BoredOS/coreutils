@@ -35,7 +35,7 @@ LDFLAGS = -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 \
 # Complete list of standard and system status utilities
 UTILS = clear echo grep cowsay sysfetch fdisk df du ps pwd rescan rev tail tar tty uname \
         lsblk meminfo pci_list uptime beep reboot shutdown crash \
-        math fbtest find head help hexdump kill mkfs_fat
+        math fbtest find head help hexdump kill mkfs_fat loadkeys
 
 ELFS   = $(patsubst %, %.elf, $(UTILS))
 CONFS  = assets/sysfetch.cfg
