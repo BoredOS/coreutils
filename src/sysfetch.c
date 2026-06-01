@@ -30,9 +30,29 @@ static SysfetchConfig config;
 static char ascii_lines[MAX_ASCII_LINES][MAX_ASCII_WIDTH];
 static int ascii_line_count = 0;
 
+static uint32_t get_default_text_color(void) {
+    const char *env_def = getenv("default_text_color");
+    if (env_def && env_def[0] == '0' && (env_def[1] == 'x' || env_def[1] == 'X')) {
+        uint32_t val = 0;
+        int i = 2;
+        while (env_def[i]) {
+            char c = env_def[i];
+            int d = -1;
+            if (c >= '0' && c <= '9') d = c - '0';
+            else if (c >= 'a' && c <= 'f') d = 10 + (c - 'a');
+            else if (c >= 'A' && c <= 'F') d = 10 + (c - 'A');
+            if (d < 0) break;
+            val = (val << 4) | d;
+            i++;
+        }
+        if (i == 10) return val;
+        if (i == 8) return 0xFF000000 | val;
+    }
+    return 0xFFCCCCCC;
+}
+
 static uint32_t ansi_to_boredos_color(int code) {
-    uint32_t default_color = sys_get_shell_config("default_text_color");
-    if (default_color == 0) default_color = 0xFFCCCCCC;
+    uint32_t default_color = get_default_text_color();
 
     switch (code) {
         case 0: return default_color;
@@ -58,8 +78,7 @@ static uint32_t ansi_to_boredos_color(int code) {
 }
 
 static void printf_ansi(const char *str) {
-    uint32_t original_color = sys_get_shell_config("default_text_color");
-    if (original_color == 0) original_color = 0xFFCCCCCC;
+    uint32_t original_color = get_default_text_color();
 
     while (*str) {
         bool is_escape = false;

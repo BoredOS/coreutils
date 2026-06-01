@@ -8,8 +8,26 @@
 
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
-    uint64_t help_color = sys_get_shell_config("help_color");
-    if (help_color != 0) sys_set_text_color(help_color);
+    const char *env_hc = getenv("help_color");
+    uint64_t help_color = 0;
+    if (env_hc && env_hc[0] == '0' && (env_hc[1] == 'x' || env_hc[1] == 'X')) {
+        uint32_t val = 0;
+        int i = 2;
+        while (env_hc[i]) {
+            char c = env_hc[i];
+            int d = -1;
+            if (c >= '0' && c <= '9') d = c - '0';
+            else if (c >= 'a' && c <= 'f') d = 10 + (c - 'a');
+            else if (c >= 'A' && c <= 'F') d = 10 + (c - 'A');
+            if (d < 0) break;
+            val = (val << 4) | d;
+            i++;
+        }
+        if (i == 10) help_color = val;
+        else if (i == 8) help_color = 0xFF000000 | val;
+    }
+    if (help_color == 0) help_color = 0xFF569CD6; 
+    sys_set_text_color(help_color);
 
     printf("BoredOS CLI Help\n");
     printf("---------------------------\n");
