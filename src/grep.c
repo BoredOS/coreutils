@@ -180,9 +180,13 @@ static void grep_recursive(const char *path) {
         return;
     }
 
-    FAT32_FileInfo entries[MAX_ENTRIES];
+    FAT32_FileInfo *entries = malloc(sizeof(FAT32_FileInfo) * MAX_ENTRIES);
+    if (!entries) return;
     int count = sys_list(path, entries, MAX_ENTRIES);
-    if (count < 0) return;
+    if (count < 0) {
+        free(entries);
+        return;
+    }
 
     for (int i = 0; i < count; i++) {
         const char *name = entries[i].name;
@@ -204,6 +208,7 @@ static void grep_recursive(const char *path) {
         else
             grep_file(full);
     }
+    free(entries);
 }
 
 int main(int argc, char **argv) {

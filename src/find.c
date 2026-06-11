@@ -2,6 +2,7 @@
 // This software is released under the GNU General Public License v3.0. See LICENSE file for details.
 // This header needs to maintain in any file it is present in, as per the GPL license terms.
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "syscall.h"
 #include <unistd.h>
@@ -26,9 +27,13 @@ int isfile(const char *path) {
 
 // recursive find
 void find(const char *path) {
-    FAT32_FileInfo ents[128];
+    FAT32_FileInfo *ents = malloc(sizeof(FAT32_FileInfo) * 128);
+    if (!ents) return;
     int n = sys_list(path, ents, 128);
-    if (n < 0) return;
+    if (n < 0) {
+        free(ents);
+        return;
+    }
 
     for (int i = 0; i < n; i++) {
         const char *filename = ents[i].name; 
@@ -50,6 +55,7 @@ void find(const char *path) {
             find(full);
         }
     }
+    free(ents);
 }
 
 int main(int argc, char *argv[]) {

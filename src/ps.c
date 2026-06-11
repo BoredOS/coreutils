@@ -201,7 +201,11 @@ int main(int argc, char **argv) {
     int show_idle_col = 0;
     int filter_pid = -1;
 
-    FAT32_FileInfo entries[MAX_PROC_ENTRIES];
+    FAT32_FileInfo *entries = malloc(sizeof(FAT32_FileInfo) * MAX_PROC_ENTRIES);
+    if (!entries) {
+        printf("ps: out of memory\n");
+        return 1;
+    }
 
     for (int i = 1; i < argc; i++) {
         if (sc_strcmp(argv[i], "-m") == 0) {
@@ -218,9 +222,11 @@ int main(int argc, char **argv) {
             filter_pid = atoi(argv[++i]);
         } else if (sc_strcmp(argv[i], "-h") == 0) {
             print_usage();
+            free(entries);
             return 0;
         } else {
             print_usage();
+            free(entries);
             return 1;
         }
     }
@@ -229,6 +235,7 @@ int main(int argc, char **argv) {
 
     if (count < 0) {
         printf("ps: failed to read /proc\n");
+        free(entries);
         return 1;
     }
 
@@ -298,5 +305,6 @@ int main(int argc, char **argv) {
         printf("\n");
     }
 
+    free(entries);
     return 0;
 }
