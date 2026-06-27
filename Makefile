@@ -72,10 +72,8 @@ obj/%.o: src/%.c
 install: all
 	mkdir -p $(DESTDIR)/bin
 	cp $(ELFS) $(DESTDIR)/bin/
-	mkdir -p $(DESTDIR)/Library/conf
-	cp $(CONFS) $(DESTDIR)/Library/conf/
-	mkdir -p $(DESTDIR)/Library/art
-	cp $(ARTS) $(DESTDIR)/Library/art/
+	mkdir -p $(DESTDIR)/Library/AppData/org.boredos.sysfetch
+	cp $(CONFS) $(ARTS) $(DESTDIR)/Library/AppData/org.boredos.sysfetch/
 
 clean:
 	rm -rf obj build $(ELFS)

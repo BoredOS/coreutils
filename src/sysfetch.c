@@ -138,7 +138,7 @@ static char* trim(char *str) {
 }
 
 static void set_config_defaults() {
-    strcpy(config.ascii_art_file, "/Library/art/boredos.txt");
+    strcpy(config.ascii_art_file, "/Library/AppData/org.boredos.sysfetch/boredos.txt");
     strcpy(config.user_host_string, "root@boredos");
     strcpy(config.separator, "------------");
     strcpy(config.os_label, "OS");
@@ -185,7 +185,7 @@ static void parse_config(char* buffer) {
 
 static void load_config() {
     set_config_defaults();
-    int fd = sys_open("/Library/conf/sysfetch.cfg", "r");
+    int fd = sys_open("/Library/AppData/org.boredos.sysfetch/sysfetch.cfg", "r");
     if (fd < 0) return;
 
     char *buffer = malloc(4096);
