@@ -7,14 +7,24 @@
 
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
-    uint64_t mem[2];
-    if (sys_system(SYSTEM_CMD_GET_MEM_INFO, (uint64_t)mem, 0, 0, 0) == 0) {
-        printf("Memory Info:\n");
-        printf("Total: %d MB\n", (int)(mem[0] / 1024 / 1024));
-        printf("Used:  %d MB\n", (int)(mem[1] / 1024 / 1024));
-        printf("Free:  %d MB\n", (int)((mem[0] - mem[1]) / 1024 / 1024));
-    } else {
-        printf("Error: Could not retrieve memory info.\n");
+    FILE *f = fopen("/sys/kernel/meminfo", "r");
+    if (!f) {
+        printf("Error: Could not open /sys/kernel/meminfo\n");
+        return 1;
     }
+    char buf[64];
+    uint64_t total = 0, used = 0;
+    if (fgets(buf, sizeof(buf), f)) {
+        total = strtoull(buf, NULL, 10);
+    }
+    if (fgets(buf, sizeof(buf), f)) {
+        used = strtoull(buf, NULL, 10);
+    }
+    fclose(f);
+
+    printf("Memory Info:\n");
+    printf("Total: %d MB\n", (int)(total / 1024 / 1024));
+    printf("Used:  %d MB\n", (int)(used / 1024 / 1024));
+    printf("Free:  %d MB\n", (int)((total - used) / 1024 / 1024));
     return 0;
 }

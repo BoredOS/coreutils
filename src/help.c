@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
         else if (i == 8) help_color = 0xFF000000 | val;
     }
     if (help_color == 0) help_color = 0xFF569CD6; 
-    sys_set_text_color(help_color);
+    set_text_color(help_color);
 
     printf("BoredOS CLI Help\n");
     printf("---------------------------\n");

@@ -14,21 +14,15 @@ typedef struct {
 
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
-    int count = sys_system(SYSTEM_CMD_PCI_LIST, 0, 0, 0, 0);
-    if (count < 0) {
-        printf("Error: Could not retrieve PCI device count.\n");
+    FILE *f = fopen("/sys/bus/pci/devices", "r");
+    if (!f) {
+        printf("Error: Could not open /sys/bus/pci/devices\n");
         return 1;
     }
-    
-    printf("PCI Devices (%d found):\n", count);
-    printf("---------------------------\n");
-    for (int i = 0; i < count; i++) {
-        pci_info_t info;
-        if (sys_system(SYSTEM_CMD_PCI_LIST, (uint64_t)&info, i, 0, 0) == 0) {
-            printf("[%d] Vendor:%04x Device:%04x Class:%02x Sub:%02x\n", 
-                   i, info.vendor, info.device, info.class_code, info.subclass);
-        }
+    char buf[256];
+    while (fgets(buf, sizeof(buf), f)) {
+        printf("%s", buf);
     }
-    
+    fclose(f);
     return 0;
 }

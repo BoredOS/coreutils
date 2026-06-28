@@ -97,7 +97,7 @@ static void printf_ansi(const char *str) {
                 str++;
             }
             if (*str == 'm') {
-                sys_set_text_color(ansi_to_boredos_color(code));
+                set_text_color(ansi_to_boredos_color(code));
                 str++;
             }
         } else {
@@ -105,7 +105,7 @@ static void printf_ansi(const char *str) {
             str++;
         }
     }
-    sys_set_text_color(original_color);
+    set_text_color(original_color);
 }
 
 static int strlen_ansi(const char *str) {

@@ -7,7 +7,7 @@
 
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
-    long tty_id = sys_system(SYSTEM_CMD_TTY_GET_ID, 0, 0, 0, 0);
+    long tty_id = sys_tty_get_id();
     if (tty_id < 0) {
         printf("not a tty\n");
         return 1;

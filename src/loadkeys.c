@@ -38,7 +38,15 @@ static const char *id_to_name(int id) {
 int main(int argc, char **argv) {
     (void)argc;
     if (argc < 2) {
-        int cur = sys_system(SYSTEM_CMD_GET_KEYBOARD_LAYOUT, 0, 0, 0, 0);
+        FILE *f = fopen("/sys/kernel/keyboard_layout", "r");
+        int cur = 0;
+        if (f) {
+            char buf[16];
+            if (fgets(buf, sizeof(buf), f)) {
+                cur = atoi(buf);
+            }
+            fclose(f);
+        }
         printf("Current keyboard layout: %s (%d)\n", id_to_name(cur), cur);
         return 0;
     }
@@ -51,7 +59,14 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    sys_system(SYSTEM_CMD_SET_KEYBOARD_LAYOUT, (uint64_t)id, 0, 0, 0);
+    FILE *f = fopen("/sys/kernel/keyboard_layout", "w");
+    if (!f) {
+        fprintf(stderr, "Error: Could not open /sys/kernel/keyboard_layout\n");
+        return 1;
+    }
+    fprintf(f, "%d\n", id);
+    fclose(f);
+
     printf("Keyboard layout set to %s (%d)\n", id_to_name(id), id);
     return 0;
 }

@@ -5,7 +5,6 @@
 #include <syscall.h>
 
 int main(int argc, char **argv) {
-    (void)argc; (void)argv;
-    sys_system(SYSTEM_CMD_CLEAR_SCREEN, 0, 0, 0, 0);
+    printf("\x1b[2J\x1b[H");
     return 0;
 }
