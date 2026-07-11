@@ -129,7 +129,7 @@ void draw_pattern_mmap(void *fb_mem, const struct fb_var_screeninfo *vinfo,
     }
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char **argv) {
     const char *fbdev = "/dev/fb0";
     int fd = open(fbdev, O_RDWR);
     

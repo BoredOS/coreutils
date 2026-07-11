@@ -5,7 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-int main(int argc, char *argv[]) {
+int main(int argc, char **argv) {
     // print all lines
     if (argc == 2) {
         if (strcmp(argv[1], "--help") == 0) {

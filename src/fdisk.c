@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <poll.h>
 
 #define MAX_PARTS 4
 #define SECTOR_SIZE_BYTES 512ULL

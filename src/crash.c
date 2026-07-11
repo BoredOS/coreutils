@@ -3,7 +3,7 @@
 // This header needs to maintain in any file it is present in, as per the GPL license terms.
 #include "syscall.h"
 
-int main() {
+int main(int argc, char **argv) {
     const char* msg = "Attempting to crash via null dereference...\n";
     sys_write(1, msg, 45);
     

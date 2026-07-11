@@ -5,7 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-int main(int argc, char *argv[]) {
+int main(int argc, char **argv) {
     if (argc == 2) {
         if(strcmp(argv[1], "--help")) {
             printf("-This command reads from the front of the file\n");

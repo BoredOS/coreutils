@@ -17,7 +17,7 @@ void reverse(char *str) {
     }
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char **argv) {
     // check if there are too much flags
     if (argc != 2) {
         printf("Wrong input, use --help for more info\n");

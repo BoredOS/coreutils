@@ -58,7 +58,7 @@ void find(const char *path) {
     free(ents);
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char **argv) {
     // check if user needs help 
     if (argc > 1 && strcmp(argv[1], "--help") == 0) {
         printf("Usage: find [DIR] [-name] [pattern] [-type] [d/f]\n");

@@ -41,29 +41,10 @@ ELFS   = $(patsubst %, %.elf, $(UTILS))
 CONFS  = assets/sysfetch.cfg
 ARTS   = assets/boredos.txt
 
-all: bootstrap-sdk $(ELFS)
-
-# Autonomic SDK Bootstrapper
-.PHONY: bootstrap-sdk
-bootstrap-sdk:
-ifdef BOOTSTRAP_SDK
-	@if [ ! -f "$(BOOTSTRAP_SDK)/lib/libc.a" ]; then \
-		if [ -d "../libc" ]; then \
-			echo "[STANDALONE] Peer libc found at ../libc. Building standard SDK..."; \
-			$(MAKE) -C ../libc SDK_DIR=$(BOOTSTRAP_SDK) install; \
-		else \
-			echo "[STANDALONE] SDK and peer libc not found. Fetching libc from GitHub..."; \
-			mkdir -p build; \
-			if [ ! -d "build/libc_src" ]; then \
-				git clone https://github.com/boredos/libc.git build/libc_src; \
-			fi; \
-			$(MAKE) -C build/libc_src SDK_DIR=$(BOOTSTRAP_SDK) install; \
-		fi \
-	fi
-endif
+all: $(ELFS)
 
 %.elf: obj/%.o
-	$(LD) $(LDFLAGS) $(SDK_PATH)/lib/crt0.o $< -lc -o $@
+	$(LD) $(LDFLAGS) $(SDK_PATH)/lib/crt0.o $(SDK_PATH)/lib/crti.o $< -lc $(SDK_PATH)/lib/crtn.o -o $@
 
 obj/%.o: src/%.c
 	@mkdir -p obj
