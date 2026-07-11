@@ -1,8 +1,8 @@
 # Copyright (c) 2026 Christiaan (chris@boreddev.nl)
 # BoredOS Core & Network Utilities Makefile
 
-CC = x86_64-elf-gcc
-LD = x86_64-elf-ld
+CC = x86_64-boredos-gcc
+LD = x86_64-boredos-ld
 
 # Smart SDK Resolution Logic
 ifneq ($(BOREDOS_SDK),)
