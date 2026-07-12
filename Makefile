@@ -2,35 +2,14 @@
 # BoredOS Core & Network Utilities Makefile
 
 CC = x86_64-boredos-gcc
-LD = x86_64-boredos-ld
-
-# Smart SDK Resolution Logic
-ifneq ($(BOREDOS_SDK),)
-  ifeq ($(wildcard $(BOREDOS_SDK)/lib/libc.a),)
-    BOOTSTRAP_SDK = $(BOREDOS_SDK)
-    SDK_PATH      = $(BOREDOS_SDK)
-  else
-    SDK_PATH      = $(BOREDOS_SDK)
-  endif
-endif
-
-# If SDK is still unresolved, fall back to a local standalone build folder
-ifeq ($(SDK_PATH),)
-  SDK_PATH = $(abspath build/sdk)
-  ifeq ($(wildcard $(SDK_PATH)/lib/libc.a),)
-    BOOTSTRAP_SDK = $(SDK_PATH)
-  endif
-endif
 
 DESTDIR ?= $(abspath build/dist)
 
 CFLAGS  = -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector \
-          -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-red-zone \
-          -isystem $(SDK_PATH)/include
+          -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-red-zone
 
-LDFLAGS = -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 \
-          --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start \
-          -L$(SDK_PATH)/lib
+LDFLAGS = -static -no-pie -Wl,-Ttext=0x40000000 \
+          -Wl,--no-dynamic-linker -Wl,-z,text -Wl,-z,max-page-size=0x1000
 
 # Complete list of standard and system status utilities
 UTILS = clear echo grep cowsay sysfetch fdisk df du ps pwd rescan rev tail tar tty uname date \
@@ -44,7 +23,7 @@ ARTS   = assets/boredos.txt
 all: $(ELFS)
 
 %.elf: obj/%.o
-	$(LD) $(LDFLAGS) $(SDK_PATH)/lib/crt0.o $(SDK_PATH)/lib/crti.o $< -lc $(SDK_PATH)/lib/crtn.o -o $@
+	$(CC) $< $(LDFLAGS) -o $@
 
 obj/%.o: src/%.c
 	@mkdir -p obj
