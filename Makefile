@@ -14,7 +14,8 @@ LDFLAGS = -static -no-pie -Wl,-Ttext=0x40000000 \
 # Complete list of standard and system status utilities
 UTILS = clear echo grep cowsay sysfetch fdisk df du ps pwd rescan rev tail tar tty uname date \
 	lsblk meminfo pci_list uptime beep reboot shutdown crash \
-	math fbtest find head help hexdump kill mkfs_fat loadkeys pidbench mixer audioplay
+	math fbtest find head help hexdump kill mkfs_fat loadkeys pidbench mixer audioplay \
+	job_applications
 
 ELFS   = $(patsubst %, %.elf, $(UTILS))
 CONFS  = assets/sysfetch.cfg
