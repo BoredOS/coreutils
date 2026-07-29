@@ -3,15 +3,21 @@
 // This header needs to maintain in any file it is present in, as per the GPL license terms.
 #include <stdio.h>
 #include <stdlib.h>
-#include <syscall.h>
+#include <unistd.h>
 
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
-    long tty_id = sys_tty_get_id();
-    if (tty_id < 0) {
+    if (!isatty(0)) {
         printf("not a tty\n");
         return 1;
     }
-    printf("/dev/tty%ld\n", tty_id + 1);
+    char *name = ttyname(0);
+    if (!name) name = ptsname(0);
+    if (name) {
+        printf("%s\n", name);
+    } else {
+        printf("?\n");
+        return 1;
+    }
     return 0;
 }

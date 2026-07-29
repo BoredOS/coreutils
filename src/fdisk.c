@@ -102,7 +102,7 @@ static void read_line_blocking(char *buf, int max_len) {
         struct pollfd pfd = { .fd = 0, .events = POLLIN, .revents = 0 };
         poll(&pfd, 1, -1);
         char ch;
-        if (sys_tty_read_in(&ch, 1) <= 0) continue;
+        if (read(0, &ch, 1) <= 0) continue;
         if (ch == '\r' || ch == '\n') {
             sys_write(1, "\n", 1);
             break;
