@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
 
 static void str_copy(char *dst, const char *src, int max_len) {
     int i = 0;
@@ -220,7 +221,11 @@ int main(int argc, char **argv) {
         parse_cpu_model(cpubuf, processor, sizeof(processor));
     }
 
-    const char *nodename = "boredos";
+    char nodename[64] = "";
+    if (read_file_to_buf("/etc/hostname", nodename, sizeof(nodename)) > 0) {
+        char *nl = strchr(nodename, '\n'); if (nl) *nl = '\0';
+        char *cr = strchr(nodename, '\r'); if (cr) *cr = '\0';
+    }
     const char *machine = "x86_64";
     if (!processor[0]) str_copy(processor, machine, sizeof(processor));
 
