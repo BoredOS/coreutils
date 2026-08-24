@@ -6,11 +6,49 @@
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <termios.h>
 #include <sys/ioctl.h>
 #include <sys/sound.h>
 
 #define MINIMP3_IMPLEMENTATION
 #include "minimp3.h"
+
+static struct termios original_termios;
+static int original_flags = 0;
+static int quit_input_ready = 0;
+
+static void restore_quit_input(void) {
+    if (quit_input_ready) {
+        tcsetattr(STDIN_FILENO, TCSANOW, &original_termios);
+        fcntl(STDIN_FILENO, F_SETFL, original_flags);
+        quit_input_ready = 0;
+    }
+}
+
+static void enable_quit_input(void) {
+    if (quit_input_ready) return;
+    if (tcgetattr(STDIN_FILENO, &original_termios) < 0) return;
+
+    struct termios raw = original_termios;
+    raw.c_lflag &= ~(ECHO | ICANON);
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) < 0) return;
+
+    original_flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, original_flags | O_NONBLOCK);
+
+    atexit(restore_quit_input);
+    quit_input_ready = 1;
+}
+
+static int check_quit_key(void) {
+    char ch;
+    if (read(STDIN_FILENO, &ch, 1) > 0) {
+        if (ch == 'q' || ch == 'Q' || ch == 3) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 typedef struct {
     char riff[4];
@@ -71,7 +109,15 @@ int play_wav(const char *filename) {
 
     char buffer[4096];
     int bytes_read;
+    enable_quit_input();
+    printf("Press 'q' or Ctrl+C to stop playback.\n");
+
     while ((bytes_read = read(wav_fd, buffer, sizeof(buffer))) > 0) {
+        if (check_quit_key()) {
+            printf("\nPlayback stopped.\n");
+            break;
+        }
+
         if (header.channels == 1 && header.bits_per_sample == 16) {
             int samples = bytes_read / 2;
             int out_bytes = samples * 4;
@@ -92,6 +138,7 @@ int play_wav(const char *filename) {
         }
     }
 
+    restore_quit_input();
     ioctl(dsp_fd, SNDCTL_DSP_SYNC, NULL);
 
     close(dsp_fd);
@@ -147,8 +194,15 @@ int play_mp3(const char *filename) {
     int speed = 0;
 
     printf("Playing MP3: %s\n", filename);
+    enable_quit_input();
+    printf("Press 'q' or Ctrl+C to stop playback.\n");
 
     while (bytes_left > 0) {
+        if (check_quit_key()) {
+            printf("\nPlayback stopped.\n");
+            break;
+        }
+
         int samples = mp3dec_decode_frame(&mp3d, mp3_ptr, bytes_left, pcm, &info);
         if (info.frame_bytes > 0) {
             mp3_ptr += info.frame_bytes;
@@ -190,6 +244,7 @@ int play_mp3(const char *filename) {
         }
     }
 
+    restore_quit_input();
     ioctl(dsp_fd, SNDCTL_DSP_SYNC, NULL);
     close(dsp_fd);
     free(file_data);
@@ -222,12 +277,15 @@ int main(int argc, char **argv) {
         }
 
         for (int i = 0; i < samples; i++) {
-            int16_t val = ((i / (period / 2)) % 2) ? 6000 : -6000;
+            int16_t val = ((i / (period / 2)) % 2) ? 16000 : -16000;
             buf[i * 2] = val;
             buf[i * 2 + 1] = val;
         }
 
-        write(dsp_fd, buf, samples * 4);
+        ssize_t w = write(dsp_fd, buf, samples * 4);
+        if (w < 0) {
+            perror("Failed to write to /dev/dsp");
+        }
         ioctl(dsp_fd, SNDCTL_DSP_SYNC, NULL);
         free(buf);
         close(dsp_fd);

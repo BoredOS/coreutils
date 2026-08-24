@@ -220,7 +220,7 @@ static void parse_config(char* buffer) {
 
 static void load_config() {
     set_config_defaults();
-    int fd = sys_open("/Library/AppData/org.boredos.sysfetch/sysfetch.cfg", 0);
+    int fd = sys_open("/Library/AppData/org.boredos.sysfetch/sysfetch.cfg", "r");
     if (fd < 0) return;
 
     size_t cap = 16384;
@@ -246,7 +246,7 @@ static void load_config() {
 }
 
 static void load_ascii_art() {
-    int fd = sys_open(config.ascii_art_file, 0);
+    int fd = sys_open(config.ascii_art_file, "r");
     if (fd < 0) {
         strcpy(ascii_lines[0], "               \033[38;2;77;81;110m##\033[38;2;39;39;39m@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%\033[0m           ");
         strcpy(ascii_lines[1], "              \033[38;2;77;81;110m####\033[38;2;39;39;39m@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%\033[0m              ");
@@ -391,7 +391,7 @@ int main(int argc, char **argv) {
         strcpy(out, "Unknown");
     }
 
-    int fd_v = sys_open("/proc/version", 0);
+    int fd_v = sys_open("/proc/version", "r");
     char v_buf[512];
     if (fd_v >= 0) {
         int b = sys_read(fd_v, v_buf, 511);
@@ -423,7 +423,7 @@ int main(int argc, char **argv) {
         info_line_count++;
     }
     if (config.uptime_label[0]) {
-        int fd_u = sys_open("/proc/uptime", 0);
+        int fd_u = sys_open("/proc/uptime", "r");
         if (fd_u >= 0) {
             char u_buf[64];
             int b = sys_read(fd_u, u_buf, 63);
@@ -490,7 +490,7 @@ int main(int argc, char **argv) {
         info_line_count++;
     }
     if (config.cpu_label[0]) {
-        int fd_c = sys_open("/proc/cpuinfo", 0);
+        int fd_c = sys_open("/proc/cpuinfo", "r");
         if (fd_c >= 0) {
             char c_buf[2048];
             int b = sys_read(fd_c, c_buf, 2047);
@@ -518,7 +518,7 @@ int main(int argc, char **argv) {
         strcat(info_lines[info_line_count++], ": bsh");
     }
     if (config.memory_label[0]) {
-        int fd_m = sys_open("/proc/meminfo", 0);
+        int fd_m = sys_open("/proc/meminfo", "r");
         if (fd_m >= 0) {
             char m_buf[512];
             int b = sys_read(fd_m, m_buf, 511);
@@ -537,7 +537,7 @@ int main(int argc, char **argv) {
         }
     }
     if (config.date_label[0]) {
-        int fd_d = sys_open("/proc/datetime", 0);
+        int fd_d = sys_open("/proc/datetime", "r");
         if (fd_d >= 0) {
             char d_buf[64];
             int b = sys_read(fd_d, d_buf, 63);

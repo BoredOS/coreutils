@@ -14,17 +14,37 @@ LDFLAGS = -static -no-pie -Wl,-Ttext=0x40000000 \
 # Complete list of standard and system status utilities
 UTILS = clear echo grep cowsay sysfetch fdisk df du ps pwd rescan rev tail tar tty uname date \
 	lsblk meminfo pci_list uptime beep reboot shutdown crash \
-	math fbtest find head help hexdump kill mkfs_fat loadkeys pidbench mixer audioplay \
+	math fbtest find head help hexdump kill mkfs_fat mkfs_ext4 loadkeys pidbench mixer audioplay \
 	job_applications
 
 ELFS   = $(patsubst %, %.elf, $(UTILS))
 CONFS  = assets/sysfetch.cfg
 ARTS   = assets/boredos.txt
 
+LWEXT4_DIR  = ../../fs/vendor/lwext4
+LWEXT4_SRCS = $(wildcard $(LWEXT4_DIR)/src/*.c)
+LWEXT4_OBJS = $(patsubst $(LWEXT4_DIR)/src/%.c, obj/lwext4/%.o, $(LWEXT4_SRCS))
+
+LWEXT4_CFLAGS = $(CFLAGS) -Iinclude -I$(LWEXT4_DIR)/include -I$(LWEXT4_DIR)/include/misc \
+                -include include/ext4_usr_config.h \
+                -Wno-unused-parameter -Wno-sign-compare -Wno-unused-variable \
+                -Wno-missing-field-initializers
+
 all: $(ELFS)
+
+mkfs_ext4.elf: obj/mkfs_ext4.o $(LWEXT4_OBJS)
+	$(CC) $^ $(LDFLAGS) -o $@
 
 %.elf: obj/%.o
 	$(CC) $< $(LDFLAGS) -o $@
+
+obj/lwext4/%.o: $(LWEXT4_DIR)/src/%.c
+	@mkdir -p obj/lwext4
+	$(CC) $(LWEXT4_CFLAGS) -c $< -o $@
+
+obj/mkfs_ext4.o: src/mkfs_ext4.c
+	@mkdir -p obj
+	$(CC) $(LWEXT4_CFLAGS) -c $< -o $@
 
 obj/%.o: src/%.c
 	@mkdir -p obj
