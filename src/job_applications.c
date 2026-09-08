@@ -5,21 +5,10 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <time.h>
-#define SYS_SET_REAPER 318
-
-static long do_syscall1(long nr) {
-    long ret;
-    __asm__ volatile (
-        "syscall"
-        : "=a"(ret)
-        : "0"(nr)
-        : "rcx", "r11", "memory"
-    );
-    return ret;
-}
+#include <syscall.h>
 
 int main(void) {
-    do_syscall1(SYS_SET_REAPER);
+    syscall5(SYS_PRCTL, PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0);
 
     while (1) {
         int status;
