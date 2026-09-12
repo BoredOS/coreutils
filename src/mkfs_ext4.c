@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
 #include <ext4.h>
 #include <ext4_mkfs.h>
 #include <ext4_blockdev.h>
@@ -147,29 +148,23 @@ int main(int argc, char **argv) {
         return 20;
     }
 
-    uint64_t total_sectors = 0;
-    const char *dn = (full_devpath[0] == '/' && strncmp(full_devpath, "/dev/", 5) == 0) ? full_devpath + 5 : full_devpath;
-    int n = sys_disk_get_count();
-    for (int i = 0; i < n; i++) {
-        disk_info_t d;
-        if (sys_disk_get_info(i, &d) == 0 && strcmp(d.devname, dn) == 0) {
-            total_sectors = d.total_sectors;
-            break;
+    off_t total_size = lseek(s_fd, 0, SEEK_END);
+    lseek(s_fd, 0, SEEK_SET);
+    uint64_t total_sectors = (total_size > 0) ? ((uint64_t)total_size / 512) : 0;
+
+    if (total_sectors == 0) {
+        uint64_t bsz64 = 0;
+        if (ioctl(s_fd, 0x80081272 /* BLKGETSIZE64 */, &bsz64) == 0 && bsz64 > 0) {
+            total_sectors = bsz64 / 512;
+        } else {
+            unsigned long sec_cnt = 0;
+            if (ioctl(s_fd, 0x1260 /* BLKGETSIZE */, &sec_cnt) == 0 && sec_cnt > 0) {
+                total_sectors = (uint64_t)sec_cnt;
+            }
         }
     }
 
-    off_t total_size = 0;
-    if (total_sectors > 0) {
-        total_size = (off_t)total_sectors * 512;
-    } else {
-        total_size = lseek(s_fd, 0, SEEK_END);
-        lseek(s_fd, 0, SEEK_SET);
-        if (total_size > 0) {
-            total_sectors = (uint64_t)total_size / 512;
-        }
-    }
-
-    if (total_size <= 0 || total_sectors == 0) {
+    if (total_sectors == 0) {
         printf("Error: Could not determine size of %s\n", full_devpath);
         close(s_fd);
         return 30;

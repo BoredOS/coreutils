@@ -9,6 +9,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <sys/ioctl.h>
+#include <dirent.h>
+#include <stdbool.h>
 
 #define MAX_PARTS 4
 #define SECTOR_SIZE_BYTES 512ULL
@@ -83,6 +86,7 @@ static uint32_t calc_crc32(const void *buf, size_t len) {
 }
 
 static int user_write_mbr(int fd, uint32_t total_sectors, partition_spec_t *parts, int count) {
+    (void)total_sectors;
     uint8_t buf[512];
     memset(buf, 0, sizeof(buf));
 
@@ -170,13 +174,13 @@ static int user_write_gpt(int fd, uint32_t total_sectors, partition_spec_t *part
     hdr.crc32 = calc_crc32(&hdr, hdr.header_size);
 
     lseek(fd, 1 * 512, SEEK_SET);
-    write(fd, &hdr, 512);
+    if (write(fd, &hdr, 512) != 512) { free(entries); return -1; }
 
     lseek(fd, 2 * 512, SEEK_SET);
-    write(fd, entries, GPT_PART_ENTRY_COUNT * GPT_PART_ENTRY_SIZE);
+    if (write(fd, entries, GPT_PART_ENTRY_COUNT * GPT_PART_ENTRY_SIZE) != (int)(GPT_PART_ENTRY_COUNT * GPT_PART_ENTRY_SIZE)) { free(entries); return -1; }
 
-    lseek(fd, (off_t)(total_sectors - 33) * 512, SEEK_SET);
-    write(fd, entries, GPT_PART_ENTRY_COUNT * GPT_PART_ENTRY_SIZE);
+    lseek(fd, (off_t)((uint64_t)(total_sectors - 33) * 512ULL), SEEK_SET);
+    if (write(fd, entries, GPT_PART_ENTRY_COUNT * GPT_PART_ENTRY_SIZE) != (int)(GPT_PART_ENTRY_COUNT * GPT_PART_ENTRY_SIZE)) { free(entries); return -1; }
 
     gpt_header_t bhdr = hdr;
     bhdr.my_lba = total_sectors - 1;
@@ -185,9 +189,10 @@ static int user_write_gpt(int fd, uint32_t total_sectors, partition_spec_t *part
     bhdr.crc32 = 0;
     bhdr.crc32 = calc_crc32(&bhdr, bhdr.header_size);
 
-    lseek(fd, (off_t)(total_sectors - 1) * 512, SEEK_SET);
-    write(fd, &bhdr, 512);
+    lseek(fd, (off_t)((uint64_t)(total_sectors - 1) * 512ULL), SEEK_SET);
+    if (write(fd, &bhdr, 512) != 512) { free(entries); return -1; }
 
+    fsync(fd);
     free(entries);
     return 0;
 }
@@ -207,7 +212,7 @@ static int sc_strcmp(const char *a, const char *b) {
     return (unsigned char)*a - (unsigned char)*b;
 }
 
-static int sc_atoi(const char *s) {
+__attribute__((unused)) static int sc_atoi(const char *s) {
     int n = 0;
     while (*s >= '0' && *s <= '9') n = n * 10 + (*s++ - '0');
     return n;
@@ -265,36 +270,106 @@ static void sc_format_size(uint64_t bytes, char *out, size_t out_len) {
     }
 }
 
+static bool disk_partition_is_esp(const char *devname, int part_num) {
+    if (part_num <= 0) return false;
+    char parent_path[256];
+    snprintf(parent_path, sizeof(parent_path), "/dev/%s", devname);
+    int pfd = open(parent_path, O_RDONLY);
+    if (pfd < 0) return false;
+
+    uint8_t sec[512];
+    bool esp = false;
+
+    // Check GPT
+    if (lseek(pfd, 512, SEEK_SET) == 512 && read(pfd, sec, 512) == 512) {
+        if (memcmp(sec, "EFI PART", 8) == 0) {
+            uint64_t part_lba = *(uint64_t*)(sec + 72);
+            uint32_t num_parts = *(uint32_t*)(sec + 80);
+            uint32_t part_sz = *(uint32_t*)(sec + 84);
+            if (part_sz >= sizeof(gpt_entry_t) && (uint32_t)part_num <= num_parts) {
+                off_t offset = (off_t)part_lba * 512 + (off_t)(part_num - 1) * part_sz;
+                gpt_entry_t entry;
+                if (lseek(pfd, offset, SEEK_SET) == offset && read(pfd, &entry, sizeof(entry)) == (ssize_t)sizeof(entry)) {
+                    if (memcmp(entry.type_guid, ESP_GUID, 16) == 0) {
+                        esp = true;
+                    }
+                }
+            }
+            close(pfd);
+            return esp;
+        }
+    }
+
+    // Check MBR
+    if (lseek(pfd, 0, SEEK_SET) == 0 && read(pfd, sec, 512) == 512) {
+        if (sec[510] == 0x55 && sec[511] == 0xAA && part_num <= 4) {
+            uint8_t type = sec[446 + (part_num - 1) * 16 + 4];
+            if (type == 0xEF) {
+                esp = true;
+            }
+        }
+    }
+
+    close(pfd);
+    return esp;
+}
+
 static void print_partition_table(const char *devname) {
-    int n = sys_disk_get_count();
     int found = 0;
     printf("Partition table for /dev/%s:\n", devname);
     printf("%-10s %-12s %-12s %-10s %-6s %s\n",
            "Device", "Start", "End", "Size", "ESP", "FAT32");
-    for (int i = 0; i < n; i++) {
-        disk_info_t d;
-        if (sys_disk_get_info(i, &d) != 0) continue;
-        if (!d.is_partition) continue;
-        int len = 0;
-        while (devname[len]) len++;
-        int match = 1;
-        for (int j = 0; j < len; j++) {
-            if (d.devname[j] != devname[j]) { match = 0; break; }
+
+    DIR *dir = opendir("/dev");
+    if (!dir) {
+        printf("  (cannot access /dev)\n");
+        return;
+    }
+
+    size_t devname_len = strlen(devname);
+    struct dirent *ent;
+    while ((ent = readdir(dir)) != NULL) {
+        const char *name = ent->d_name;
+        if (strncmp(name, devname, devname_len) != 0) continue;
+        const char *suffix = name + devname_len;
+        if (*suffix < '0' || *suffix > '9') continue;
+
+        int part_num = atoi(suffix);
+
+        char part_path[256];
+        snprintf(part_path, sizeof(part_path), "/dev/%s", name);
+        int fd = open(part_path, O_RDONLY);
+        if (fd < 0) continue;
+
+        uint64_t size_bytes = 0;
+        if (ioctl(fd, 0x80081272 /* BLKGETSIZE64 */, &size_bytes) != 0 || size_bytes == 0) {
+            off_t sk = lseek(fd, 0, SEEK_END);
+            if (sk > 0) size_bytes = (uint64_t)sk;
         }
-        if (!match) continue;
-        char start_buf[24], end_buf[24], size_buf[24];
-        uint64_t start_bytes = (uint64_t)d.lba_offset * SECTOR_SIZE_BYTES;
-        uint64_t end_bytes = (uint64_t)(d.lba_offset + d.total_sectors - 1) * SECTOR_SIZE_BYTES;
-        uint64_t size_bytes = (uint64_t)d.total_sectors * SECTOR_SIZE_BYTES;
-        sc_format_size(start_bytes, start_buf, sizeof(start_buf));
-        sc_format_size(end_bytes, end_buf, sizeof(end_buf));
+
+        bool is_fat32 = false;
+        bool is_esp = disk_partition_is_esp(devname, part_num);
+        uint8_t boot_sec[512];
+        lseek(fd, 0, SEEK_SET);
+        if (read(fd, boot_sec, 512) == 512) {
+            if (boot_sec[510] == 0x55 && boot_sec[511] == 0xAA) {
+                if (memcmp(boot_sec + 82, "FAT32   ", 8) == 0) {
+                    is_fat32 = true;
+                }
+            }
+        }
+        close(fd);
+
+        char size_buf[24];
         sc_format_size(size_bytes, size_buf, sizeof(size_buf));
         printf("/dev/%-5s %-12s %-12s %-10s %-6s %s\n",
-               d.devname, start_buf, end_buf, size_buf,
-               d.is_esp ? "yes" : "no",
-               d.is_fat32 ? "yes" : "no");
+               name, "-", "-", size_buf,
+               is_esp ? "yes" : "no",
+               is_fat32 ? "yes" : "no");
         found++;
     }
+    closedir(dir);
+
     if (!found) printf("  (no partitions)\n");
 }
 
@@ -334,27 +409,43 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    disk_info_t disk;
-    int found = 0;
-    int n = sys_disk_get_count();
-    for (int i = 0; i < n; i++) {
-        disk_info_t d;
-        if (sys_disk_get_info(i, &d) != 0) continue;
-        if (!d.is_partition && sc_strcmp(d.devname, devname) == 0) {
-            disk = d;
-            found = 1;
-            break;
-        }
-    }
-    if (!found) { printf("[ERROR] Device not found: /dev/%s\n", devname); return 1; }
-
     char devpath[64];
     snprintf(devpath, sizeof(devpath), "/dev/%s", devname);
+
+    if (!opt_script) {
+        printf("WARNING: This will repartition %s and destroy all data! Continue? [y/N]: ", devpath);
+        fflush(stdout);
+        char ans[16] = {0};
+        if (!fgets(ans, sizeof(ans), stdin) || (ans[0] != 'y' && ans[0] != 'Y')) {
+            printf("Aborted.\n");
+            return 0;
+        }
+    }
+
     int fd = open(devpath, O_RDWR);
     if (fd < 0) {
         printf("[ERROR] Failed to open %s for partitioning.\n", devpath);
         return 1;
     }
+
+    uint64_t disk_bytes = 0;
+    if (ioctl(fd, 0x80081272 /* BLKGETSIZE64 */, &disk_bytes) != 0 || disk_bytes == 0) {
+        off_t sk = lseek(fd, 0, SEEK_END);
+        if (sk > 0) disk_bytes = (uint64_t)sk;
+        lseek(fd, 0, SEEK_SET);
+    }
+
+    if (disk_bytes == 0) {
+        printf("[ERROR] Failed to determine size of %s\n", devpath);
+        close(fd);
+        return 1;
+    }
+
+    disk_info_t disk;
+    memset(&disk, 0, sizeof(disk));
+    strncpy(disk.devname, devname, sizeof(disk.devname) - 1);
+    disk.devname[sizeof(disk.devname) - 1] = 0;
+    disk.total_sectors = (uint32_t)(disk_bytes / 512ULL);
 
     partition_spec_t parts[2];
     int count = 0;
@@ -371,6 +462,11 @@ int main(int argc, char **argv) {
 
         uint32_t root_start = 2048 + esp_sectors;
         if (root_start % 2048) root_start = ((root_start + 2047) / 2048) * 2048;
+        if (disk.total_sectors <= root_start + 34) {
+            printf("[ERROR] Disk too small (%u sectors) for UEFI layout.\n", disk.total_sectors);
+            close(fd);
+            return 1;
+        }
         parts[1].lba_start    = root_start;
         parts[1].sector_count = disk.total_sectors - root_start - 34;
         parts[1].part_type    = 0;
@@ -393,6 +489,7 @@ int main(int argc, char **argv) {
     if (ret != 0) { printf("[ERROR] Partition write failed.\n"); return 1; }
     printf("Partition table written to /dev/%s.\n", devname);
 
+    sync();
     sys_disk_rescan(devname);
     return 0;
 }

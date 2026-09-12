@@ -7,6 +7,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <syscall.h>
+#include <dirent.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdlib.h>
 
 #define LSBLK_MAX_DISKS 32
 #define LSBLK_SECTOR_SIZE 512ULL
@@ -219,14 +223,146 @@ static void print_json_disk(const disk_info_t *disk, disk_info_t *items, int cou
     printf("]}");
 }
 
-static int load_disks(disk_info_t *items, int max) {
-    int total = sys_disk_get_count();
-    int count = 0;
+static const uint8_t ESP_GUID[16] = {
+    0x28, 0x73, 0x2a, 0xc1, 0x1f, 0xf8, 0xd2, 0x11,
+    0xba, 0x4b, 0x00, 0xa0, 0xc9, 0x3e, 0xc9, 0x3b
+};
 
-    for (int i = 0; i < total && count < max; i++) {
-        if (sys_disk_get_info(i, &items[count]) == 0) count++;
+static bool disk_partition_is_esp(const char *parent_dev, int part_num) {
+    if (part_num <= 0) return false;
+    char path[128];
+    snprintf(path, sizeof(path), "/dev/%s", parent_dev);
+    int pfd = open(path, O_RDONLY);
+    if (pfd < 0) return false;
+
+    uint8_t sec[512];
+    bool esp = false;
+
+    if (lseek(pfd, 512, SEEK_SET) == 512 && read(pfd, sec, 512) == 512) {
+        if (memcmp(sec, "EFI PART", 8) == 0) {
+            uint64_t part_lba = *(uint64_t*)(sec + 72);
+            uint32_t num_parts = *(uint32_t*)(sec + 80);
+            uint32_t part_sz = *(uint32_t*)(sec + 84);
+            if (part_sz >= 128 && (uint32_t)part_num <= num_parts) {
+                off_t offset = (off_t)part_lba * 512 + (off_t)(part_num - 1) * part_sz;
+                uint8_t entry_guid[16];
+                if (lseek(pfd, offset, SEEK_SET) == offset && read(pfd, entry_guid, 16) == 16) {
+                    if (memcmp(entry_guid, ESP_GUID, 16) == 0) {
+                        esp = true;
+                    }
+                }
+            }
+            close(pfd);
+            return esp;
+        }
     }
 
+    if (lseek(pfd, 0, SEEK_SET) == 0 && read(pfd, sec, 512) == 512) {
+        if (sec[510] == 0x55 && sec[511] == 0xAA && part_num <= 4) {
+            uint8_t type = sec[446 + (part_num - 1) * 16 + 4];
+            if (type == 0xEF) {
+                esp = true;
+            }
+        }
+    }
+
+    close(pfd);
+    return esp;
+}
+
+static int compare_disks(const void *a, const void *b) {
+    const disk_info_t *da = (const disk_info_t *)a;
+    const disk_info_t *db = (const disk_info_t *)b;
+    return strcmp(da->devname, db->devname);
+}
+
+static int load_disks(disk_info_t *items, int max) {
+    int count = 0;
+    DIR *dir = opendir("/dev");
+    if (!dir) return 0;
+
+    struct dirent *ent;
+    while ((ent = readdir(dir)) != NULL && count < max) {
+        const char *name = ent->d_name;
+        if (strncmp(name, "sd", 2) != 0 && strncmp(name, "hd", 2) != 0 && strncmp(name, "vd", 2) != 0)
+            continue;
+
+        char path[128];
+        snprintf(path, sizeof(path), "/dev/%.60s", name);
+        int fd = open(path, O_RDONLY);
+        if (fd < 0) continue;
+
+        off_t size_bytes = lseek(fd, 0, SEEK_END);
+        if (size_bytes < 0) {
+            close(fd);
+            continue;
+        }
+
+        memset(&items[count], 0, sizeof(disk_info_t));
+        snprintf(items[count].devname, sizeof(items[count].devname), "%.15s", name);
+        items[count].total_sectors = (uint32_t)(size_bytes / 512);
+
+        size_t len = strlen(name);
+        if (len > 0 && name[len - 1] >= '0' && name[len - 1] <= '9') {
+            items[count].is_partition = true;
+
+            uint8_t sec0[512];
+            lseek(fd, 0, SEEK_SET);
+            if (read(fd, sec0, 512) == 512) {
+                if (sec0[510] == 0x55 && sec0[511] == 0xAA && memcmp(sec0 + 82, "FAT32   ", 8) == 0) {
+                    items[count].is_fat32 = true;
+                    char lbl[12];
+                    memcpy(lbl, sec0 + 71, 11);
+                    lbl[11] = '\0';
+                    int k = 10;
+                    while (k >= 0 && (lbl[k] == ' ' || lbl[k] == '\0')) {
+                        lbl[k--] = '\0';
+                    }
+                    if (lbl[0] && strcmp(lbl, "NO NAME") != 0) {
+                        snprintf(items[count].label, sizeof(items[count].label), "%s", lbl);
+                    }
+                }
+            }
+
+            if (!items[count].label[0]) {
+                uint8_t sb[512];
+                lseek(fd, 1024, SEEK_SET);
+                if (read(fd, sb, 512) == 512) {
+                    uint16_t magic = *(uint16_t*)(sb + 0x38);
+                    if (magic == 0xEF53) {
+                        char vol_name[17];
+                        memcpy(vol_name, sb + 0x78, 16);
+                        vol_name[16] = '\0';
+                        if (vol_name[0]) {
+                            snprintf(items[count].label, sizeof(items[count].label), "%s", vol_name);
+                        }
+                    }
+                }
+            }
+
+            char parent[16];
+            snprintf(parent, sizeof(parent), "%s", name);
+            size_t plen = strlen(parent);
+            while (plen > 0 && parent[plen - 1] >= '0' && parent[plen - 1] <= '9') {
+                plen--;
+            }
+            int part_num = atoi(parent + plen);
+            parent[plen] = '\0';
+            if (part_num > 0 && plen > 0) {
+                items[count].is_esp = disk_partition_is_esp(parent, part_num);
+            }
+        } else {
+            items[count].is_partition = false;
+        }
+
+        close(fd);
+        count++;
+    }
+    closedir(dir);
+
+    if (count > 1) {
+        qsort(items, count, sizeof(disk_info_t), compare_disks);
+    }
     return count;
 }
 

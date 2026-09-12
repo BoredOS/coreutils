@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/ioctl.h>
 #include <syscall.h>
 
 #define SECTOR_SIZE 512
@@ -125,22 +126,28 @@ int main(int argc, char **argv) {
     }
 
     uint32_t total_sectors = 0;
-    const char *devname = full_devpath;
-    if (strncmp(devname, "/dev/", 5) == 0) devname += 5;
+    off_t size_bytes = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    if (size_bytes > 0) {
+        total_sectors = (uint32_t)(size_bytes / 512);
+    }
 
-    int num_disks = sys_disk_get_count();
-    for (int i = 0; i < num_disks; i++) {
-        disk_info_t d;
-        if (sys_disk_get_info(i, &d) == 0) {
-            if (strcmp(d.devname, devname) == 0) {
-                total_sectors = d.total_sectors;
-                break;
+    if (total_sectors < 65536) {
+        uint64_t bsz64 = 0;
+        if (ioctl(fd, 0x80081272, &bsz64) == 0 && bsz64 > 0) {
+            total_sectors = (uint32_t)(bsz64 / 512);
+        } else if (ioctl(fd, 0x1272, &bsz64) == 0 && bsz64 > 0) {
+            total_sectors = (uint32_t)(bsz64 / 512);
+        } else {
+            unsigned long sec_cnt = 0;
+            if (ioctl(fd, 0x1260, &sec_cnt) == 0 && sec_cnt > 0) {
+                total_sectors = (uint32_t)sec_cnt;
             }
         }
     }
 
     if (total_sectors < 65536) {
-        printf("[ERROR] Partition too small (< 32 MB) for FAT32 format.\n");
+        printf("[ERROR] Partition %s too small (%u sectors, min 65536) for FAT32 format.\n", full_devpath, total_sectors);
         close(fd);
         return 1;
     }
@@ -198,17 +205,37 @@ int main(int argc, char **argv) {
     uint8_t zero_head[64 * SECTOR_SIZE];
     memset(zero_head, 0, sizeof(zero_head));
     lseek(fd, 0, SEEK_SET);
-    write(fd, zero_head, sizeof(zero_head));
+    if (write(fd, zero_head, sizeof(zero_head)) != (ssize_t)sizeof(zero_head)) {
+        printf("[ERROR] Failed to write initial zero sectors on %s\n", full_devpath);
+        close(fd);
+        return 1;
+    }
 
     lseek(fd, 0, SEEK_SET);
-    write(fd, &vbr, sizeof(vbr));
+    if (write(fd, &vbr, sizeof(vbr)) != (ssize_t)sizeof(vbr)) {
+        printf("[ERROR] Failed to write VBR\n");
+        close(fd);
+        return 1;
+    }
     lseek(fd, 6 * SECTOR_SIZE, SEEK_SET);
-    write(fd, &vbr, sizeof(vbr));
+    if (write(fd, &vbr, sizeof(vbr)) != (ssize_t)sizeof(vbr)) {
+        printf("[ERROR] Failed to write backup VBR\n");
+        close(fd);
+        return 1;
+    }
 
     lseek(fd, 1 * SECTOR_SIZE, SEEK_SET);
-    write(fd, &fsinfo, sizeof(fsinfo));
+    if (write(fd, &fsinfo, sizeof(fsinfo)) != (ssize_t)sizeof(fsinfo)) {
+        printf("[ERROR] Failed to write FSInfo\n");
+        close(fd);
+        return 1;
+    }
     lseek(fd, 7 * SECTOR_SIZE, SEEK_SET);
-    write(fd, &fsinfo, sizeof(fsinfo));
+    if (write(fd, &fsinfo, sizeof(fsinfo)) != (ssize_t)sizeof(fsinfo)) {
+        printf("[ERROR] Failed to write backup FSInfo\n");
+        close(fd);
+        return 1;
+    }
 
     uint8_t *fat_buf = (uint8_t*)malloc(SECTOR_SIZE);
     if (!fat_buf) {
@@ -269,6 +296,7 @@ int main(int argc, char **argv) {
     }
 
     free(fat_buf);
+    sys_disk_sync(full_devpath);
     close(fd);
 
     printf("Done.\n");
