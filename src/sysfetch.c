@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <time.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <netinet/in.h>
@@ -537,18 +538,14 @@ int main(int argc, char **argv) {
         }
     }
     if (config.date_label[0]) {
-        int fd_d = sys_open("/proc/datetime", "r");
-        if (fd_d >= 0) {
+        time_t now = time(NULL);
+        struct tm tm_info;
+        if (localtime_r(&now, &tm_info)) {
             char d_buf[64];
-            int b = sys_read(fd_d, d_buf, 63);
-            d_buf[b] = 0;
-            sys_close(fd_d);
-            
+            strftime(d_buf, sizeof(d_buf), "%Y-%m-%d %H:%M:%S", &tm_info);
             strcpy(info_lines[info_line_count], config.date_label);
             strcat(info_lines[info_line_count], ": ");
             strcat(info_lines[info_line_count], d_buf);
-            char *nl = strchr(info_lines[info_line_count], '\n');
-            if (nl) *nl = 0;
             info_line_count++;
         }
     }
