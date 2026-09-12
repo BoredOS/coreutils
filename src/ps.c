@@ -239,33 +239,55 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    print_header(show_mem, show_ticks, show_idle_col);
+    int valid_pids[MAX_PROC_ENTRIES];
+    int valid_count = 0;
 
     for (int i = 0; i < count; i++) {
-        char path[96];
-        char buf[512];
-        char name[64];
-        char mem_str[32];
-        char tmp[32];
-
-        int pid;
-        int memory_kb;
-        int ticks;
-        int idle;
-
         if (!entries[i].is_directory)
             continue;
 
         if (!is_numeric(entries[i].name))
             continue;
 
-        pid = atoi(entries[i].name);
+        int pid = atoi(entries[i].name);
+        if (pid <= 0)
+            continue;
 
         if (filter_pid >= 0 && pid != filter_pid)
             continue;
 
+        if (valid_count < MAX_PROC_ENTRIES) {
+            valid_pids[valid_count++] = pid;
+        }
+    }
+
+    for (int i = 1; i < valid_count; i++) {
+        int key = valid_pids[i];
+        int j = i - 1;
+        while (j >= 0 && valid_pids[j] > key) {
+            valid_pids[j + 1] = valid_pids[j];
+            j--;
+        }
+        valid_pids[j + 1] = key;
+    }
+
+    print_header(show_mem, show_ticks, show_idle_col);
+
+    for (int i = 0; i < valid_count; i++) {
+        char path[96];
+        char buf[512];
+        char name[64];
+        char mem_str[32];
+        char tmp[32];
+
+        int pid = valid_pids[i];
+        int memory_kb;
+        int ticks;
+        int idle;
+
+        itoa(pid, tmp);
         strcpy(path, "/proc/");
-        strcat(path, entries[i].name);
+        strcat(path, tmp);
         strcat(path, "/status");
 
         if (read_file_to_buf(path, buf, sizeof(buf)) <= 0)
@@ -280,7 +302,6 @@ int main(int argc, char **argv) {
         if (idle && !include_idle)
             continue;
 
-        itoa(pid, tmp);
         print_padded(tmp, 8);
 
         if (!name[0])
