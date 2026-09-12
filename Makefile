@@ -14,7 +14,7 @@ LDFLAGS = -Wl,-z,max-page-size=0x1000 -Wl,-dynamic-linker,/usr/lib/ld.so -Wl,-rp
 UTILS = clear echo grep cowsay sysfetch fdisk df du ps pwd rescan rev tail tar tty uname date \
 	lsblk meminfo pci_list uptime beep reboot shutdown crash \
 	math fbtest find head help hexdump kill mkfs_fat mkfs_ext4 loadkeys pidbench mixer audioplay \
-	job_applications
+	yawn service id sync mount umount
 
 ELFS   = $(patsubst %, %.elf, $(UTILS))
 CONFS  = assets/sysfetch.cfg
@@ -52,6 +52,7 @@ obj/%.o: src/%.c
 install: all
 	mkdir -p $(DESTDIR)/bin
 	cp $(ELFS) $(DESTDIR)/bin/
+	cp yawn.elf $(DESTDIR)/bin/init.elf
 	mkdir -p $(DESTDIR)/Library/AppData/org.boredos.sysfetch
 	cp $(CONFS) $(ARTS) $(DESTDIR)/Library/AppData/org.boredos.sysfetch/
 
