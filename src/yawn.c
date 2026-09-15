@@ -1,7 +1,6 @@
-// Copyright (c) 2026 Christiaan (chris@boreddev.nl)
+// Copyright (c) 2023-2026 Christiaan (chris@boreddev.nl)
 // This software is released under the GNU General Public License v3.0. See LICENSE file for details.
 // This header needs to maintain in any file it is present in, as per the GPL license terms.
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -291,7 +290,7 @@ static void ttys_parse_line(char *line) {
         entry->tty_id = tty_name_to_id(name);
     }
 
-    safe_copy(entry->command, command[0] ? command : "/bin/bsh.elf", sizeof(entry->command));
+    safe_copy(entry->command, command[0] ? command : "/bin/bsh", sizeof(entry->command));
     safe_copy(entry->term_type, term_type[0] ? term_type : "ansi", sizeof(entry->term_type));
     entry->is_on = (strcasecmp(status_str, "on") == 0);
 
@@ -408,7 +407,7 @@ static void check_lazy_ttys(void) {
 static void run_script_sync(const char *script_path) {
     if (!sys_exists(script_path)) return;
 
-    const char *shell_bin = "/bin/bsh.elf";
+    const char *shell_bin = "/bin/bsh";
     if (!sys_exists(shell_bin)) {
         shell_bin = "/bin/bsh.elf";
         if (!sys_exists(shell_bin)) return;
@@ -540,8 +539,11 @@ int main(int argc, char **argv) {
         g_headless_mode = true;
     }
 
-    mkdir("/tmp", 0777);
+    mkdir("/tmp", 01777);
+    chmod("/tmp", 01777);
     mkdir("/var", 0755);
+    mkdir("/var/tmp", 01777);
+    chmod("/var/tmp", 01777);
     mkdir("/var/run", 0755);
     mkdir("/var/log", 0755);
     mkdir("/etc/rc.d", 0755);
@@ -679,6 +681,8 @@ int main(int argc, char **argv) {
                 tty_entry_t *entry = &g_ttys[k];
                 if (reaped_pid == entry->pid) {
                     entry->pid = 0;
+                    chmod(entry->dev_path, 0600);
+                    chown(entry->dev_path, 0, 0);
 
                     if (!g_shutting_down && entry->is_on) {
                         bool should_spawn = false;

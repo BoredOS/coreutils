@@ -176,11 +176,38 @@ static void print_usage(void) {
     printf("  -h       Show this help\n");
 }
 
+static void lookup_user(int uid, char *out, int max_len) {
+    if (uid == 0) {
+        strncpy(out, "root", max_len - 1);
+        out[max_len - 1] = '\0';
+        return;
+    }
+    FILE *f = fopen("/etc/passwd", "r");
+    if (f) {
+        char line[256];
+        while (fgets(line, sizeof(line), f)) {
+            char *p = line;
+            char *name = strsep(&p, ":");
+            strsep(&p, ":"); // x
+            char *u_str = strsep(&p, ":");
+            if (u_str && atoi(u_str) == uid && name) {
+                strncpy(out, name, max_len - 1);
+                out[max_len - 1] = '\0';
+                fclose(f);
+                return;
+            }
+        }
+        fclose(f);
+    }
+    snprintf(out, max_len, "%d", uid);
+}
+
 static void print_header(int show_mem,
                          int show_ticks,
                          int show_idle) {
     print_padded("PID", 8);
-    print_padded("NAME", 22);
+    print_padded("USER", 10);
+    print_padded("NAME", 20);
 
     if (show_mem)
         print_padded("MEMORY", 14);
@@ -302,12 +329,17 @@ int main(int argc, char **argv) {
         if (idle && !include_idle)
             continue;
 
+        int uid = find_value(buf, "Uid");
+        char user_str[32];
+        lookup_user(uid, user_str, sizeof(user_str));
+
         print_padded(tmp, 8);
+        print_padded(user_str, 10);
 
         if (!name[0])
             strcpy(name, "Unknown");
 
-        print_padded(name, 22);
+        print_padded(name, 20);
 
         if (show_mem) {
             format_mem(memory_kb, mem_str);

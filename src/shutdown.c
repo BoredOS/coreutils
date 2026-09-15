@@ -20,6 +20,11 @@ int main(int argc, char **argv) {
         }
     }
 
+    if (getuid() != 0 && geteuid() != 0) {
+        fprintf(stderr, "shutdown: Permission denied (must be root, try 'doas shutdown')\n");
+        return 1;
+    }
+
     if (force) {
         sys_shutdown();
         return 0;

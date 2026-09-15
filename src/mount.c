@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <syscall.h>
 
 static int print_mounts_proc(void) {
@@ -59,6 +60,11 @@ int main(int argc, char **argv) {
 
     if (!dev || !target) {
         fprintf(stderr, "usage: %s [-t fstype] <device> <mountpoint>\n", argv[0]);
+        return 1;
+    }
+
+    if (getuid() != 0 && geteuid() != 0) {
+        fprintf(stderr, "mount: Permission denied (only root can mount filesystems, try 'doas mount')\n");
         return 1;
     }
 

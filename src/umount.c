@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <syscall.h>
 
 static void resolve_target(const char *arg, char *out, size_t out_len) {
@@ -42,6 +43,11 @@ static void resolve_target(const char *arg, char *out, size_t out_len) {
 int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr, "usage: %s <mountpoint|device> ...\n", argv[0]);
+        return 1;
+    }
+
+    if (getuid() != 0 && geteuid() != 0) {
+        fprintf(stderr, "umount: Permission denied (only root can unmount filesystems, try 'doas umount')\n");
         return 1;
     }
 

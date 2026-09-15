@@ -20,6 +20,11 @@ int main(int argc, char **argv) {
         }
     }
 
+    if (getuid() != 0 && geteuid() != 0) {
+        fprintf(stderr, "reboot: Permission denied (must be root, try 'doas reboot')\n");
+        return 1;
+    }
+
     if (force) {
         sys_reboot();
         return 0;

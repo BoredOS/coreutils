@@ -219,9 +219,57 @@ static void parse_config(char* buffer) {
     }
 }
 
+static void auto_seed_sysfetch(const char *user_cfg) {
+    if (sys_exists(user_cfg)) return;
+    int sfd = sys_open("/Library/AppData/org.boredos.sysfetch/sysfetch.cfg", "r");
+    if (sfd < 0) return;
+
+    char dir[256];
+    strncpy(dir, user_cfg, sizeof(dir) - 1);
+    dir[sizeof(dir) - 1] = '\0';
+    char *slash = strrchr(dir, '/');
+    if (slash && slash != dir) {
+        *slash = '\0';
+        char current[256] = "";
+        char *saveptr = NULL;
+        char *part = strtok_r(dir + 1, "/", &saveptr);
+        while (part) {
+            char next[256];
+            snprintf(next, sizeof(next), "%s/%s", current, part);
+            strncpy(current, next, sizeof(current) - 1);
+            sys_mkdir(current);
+            part = strtok_r(NULL, "/", &saveptr);
+        }
+    }
+
+    int dfd = sys_open(user_cfg, "w");
+    if (dfd >= 0) {
+        char buf[1024];
+        int n;
+        while ((n = sys_read(sfd, buf, sizeof(buf))) > 0) {
+            sys_write_fs(dfd, buf, n);
+        }
+        sys_close(dfd);
+    }
+    sys_close(sfd);
+}
+
 static void load_config() {
     set_config_defaults();
-    int fd = sys_open("/Library/AppData/org.boredos.sysfetch/sysfetch.cfg", "r");
+    char cfg_path[256];
+    snprintf(cfg_path, sizeof(cfg_path), "/Library/AppData/org.boredos.sysfetch/sysfetch.cfg");
+
+    const char *home = getenv("HOME");
+    if (home && home[0] && strcmp(home, "/") != 0) {
+        char user_cfg[256];
+        snprintf(user_cfg, sizeof(user_cfg), "%s/Library/AppData/org.boredos.sysfetch/sysfetch.cfg", home);
+        auto_seed_sysfetch(user_cfg);
+        if (sys_exists(user_cfg)) {
+            snprintf(cfg_path, sizeof(cfg_path), "%s", user_cfg);
+        }
+    }
+
+    int fd = sys_open(cfg_path, "r");
     if (fd < 0) return;
 
     size_t cap = 16384;
@@ -338,10 +386,37 @@ int main(int argc, char **argv) {
 
     if (config.user_host_string[0]) {
         if (strcmp(config.user_host_string, "auto") == 0 || strcmp(config.user_host_string, "root@boredos") == 0) {
+            const char *cur_u = getenv("USER");
+            char u_buf[64] = "";
+            if (!cur_u || !cur_u[0] || strcmp(cur_u, "user") == 0) {
+                uid_t u = getuid();
+                if (u == 0) {
+                    cur_u = "root";
+                } else {
+                    FILE *pf = fopen("/etc/passwd", "r");
+                    if (pf) {
+                        char pline[256];
+                        while (fgets(pline, sizeof(pline), pf)) {
+                            char *nl = strchr(pline, '\n'); if (nl) *nl = 0;
+                            char *cr = strchr(pline, '\r'); if (cr) *cr = 0;
+                            char *ptr = pline;
+                            char *name = strsep(&ptr, ":");
+                            strsep(&ptr, ":");
+                            char *uid_str = strsep(&ptr, ":");
+                            if (uid_str && (uid_t)atol(uid_str) == u) {
+                                strncpy(u_buf, name, sizeof(u_buf) - 1);
+                                break;
+                            }
+                        }
+                        fclose(pf);
+                    }
+                    cur_u = u_buf[0] ? u_buf : "user";
+                }
+            }
             if (host_name[0]) {
-                snprintf(info_lines[info_line_count++], 127, "root@%s", host_name);
+                snprintf(info_lines[info_line_count++], 127, "%s@%s", cur_u, host_name);
             } else {
-                snprintf(info_lines[info_line_count++], 127, "root");
+                snprintf(info_lines[info_line_count++], 127, "%s", cur_u);
             }
         } else if (strstr(config.user_host_string, "%h")) {
             char user_host_buf[128] = "";

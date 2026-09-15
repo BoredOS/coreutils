@@ -1,7 +1,6 @@
-// Copyright (c) 2026 Christiaan (chris@boreddev.nl)
+// Copyright (c) 2023-2026 Christiaan (chris@boreddev.nl)
 // This software is released under the GNU General Public License v3.0. See LICENSE file for details.
 // This header needs to maintain in any file it is present in, as per the GPL license terms.
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -162,9 +161,9 @@ static int service_daemon(const char *name, const char *action, bool force) {
     snprintf(pid_file, sizeof(pid_file), "/var/run/%s.pid", name);
 
     char bin_path[MAX_PATH];
-    snprintf(bin_path, sizeof(bin_path), "/bin/%s.elf", name);
+    snprintf(bin_path, sizeof(bin_path), "/bin/%s", name);
     if (!sys_exists(bin_path)) {
-        snprintf(bin_path, sizeof(bin_path), "/bin/%s", name);
+        snprintf(bin_path, sizeof(bin_path), "/bin/%s.elf", name);
         if (!sys_exists(bin_path)) {
             printf("service: '%s' not found in /etc/rc.d/ or /bin/\n", name);
             return 1;
@@ -283,10 +282,16 @@ int main(int argc, char **argv) {
     const char *action = (argc >= 3) ? argv[2] : "status";
     bool force = (strcmp(action, "forcestart") == 0 || strcmp(action, "onestart") == 0);
 
+    if (strcmp(action, "status") != 0 && getuid() != 0 && geteuid() != 0) {
+        fprintf(stderr, "service: %s requires root privileges (try running with 'doas service %s %s')\n",
+                action, service_name, action);
+        return 1;
+    }
+
     char rc_script[MAX_PATH];
     snprintf(rc_script, sizeof(rc_script), "/etc/rc.d/%s", service_name);
     if (sys_exists(rc_script)) {
-        const char *shell_bin = "/bin/bsh.elf";
+        const char *shell_bin = "/bin/bsh";
         if (!sys_exists(shell_bin)) {
             shell_bin = "/bin/bsh.elf";
             if (!sys_exists(shell_bin)) {
