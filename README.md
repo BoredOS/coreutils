@@ -28,6 +28,6 @@ To stage the compiled commands and assets into your target initrd root filesyste
 ```bash
 make DESTDIR=/path/to/initrd/root install
 ```
-- All utility executables (`*.elf`) are routed to `/bin/`
+- All utility executables are routed to `/bin/`
 - Configuration assets (`sysfetch.cfg`) are routed to `/Library/conf/`
 - System ASCII artwork (`boredos.txt`) is routed to `/Library/art/`
